@@ -1,0 +1,88 @@
+import pandas as pd
+from sklearn.model_selection import train_test_split
+from sklearn.linear_model import LogisticRegression
+from sklearn.svm import SVC
+from sklearn.naive_bayes import GaussianNB
+from sklearn.neighbors import KNeighborsClassifier
+from sklearn.tree import DecisionTreeClassifier
+from sklearn.ensemble import RandomForestClassifier
+from sklearn.preprocessing import StandardScaler
+import matplotlib.pyplot as plt
+
+from sklearn.feature_selection import SequentialFeatureSelector
+
+def forward_select_features(X, y, estimator, k_features):
+    sfs = SequentialFeatureSelector(estimator, n_features_to_select=k_features, direction='forward')
+    sfs.fit(X, y)
+    selected_features = X.columns[sfs.get_support()]
+    return X[selected_features]
+
+# Load datasets
+df= pd.read_csv("prep.csv")
+df = pd.get_dummies(df, drop_first=True)
+
+X = df.drop("classification_yes", axis=1)
+y = df["classification_yes"]
+
+# Use Logistic Regression as base estimator for feature selection
+X_selected = forward_select_features(X, y, LogisticRegression(max_iter=1000), k_features=5)
+
+# Split and scale
+def split_scalar(indep_X, dep_Y):
+    X_train, X_test, y_train, y_test = train_test_split(indep_X, dep_Y, test_size=0.25, random_state=0)
+    sc = StandardScaler()
+    X_train = sc.fit_transform(X_train)
+    X_test = sc.transform(X_test)    
+    return X_train, X_test, y_train, y_test
+
+X_train, X_test, y_train, y_test = split_scalar(X_selected, y)
+
+def evaluate_model(classifier, X_train, y_train, X_test, y_test):
+    classifier.fit(X_train, y_train)
+    from sklearn.metrics import accuracy_score, classification_report, confusion_matrix
+    y_pred = classifier.predict(X_test)
+    acc = accuracy_score(y_test, y_pred)
+    report = classification_report(y_test, y_pred)
+    cm = confusion_matrix(y_test, y_pred)
+    return classifier, acc, report, cm
+
+# Store accuracy for each model
+accuracies = {}
+
+models = {
+    "Logistic": LogisticRegression(max_iter=1000),
+    "SVM_Linear": SVC(kernel='linear'),
+    "SVM_RBF": SVC(kernel='rbf'),
+    "KNN": KNeighborsClassifier(),
+    "NaiveBayes": GaussianNB(),
+    "DecisionTree": DecisionTreeClassifier(),
+    "RandomForest": RandomForestClassifier()
+}
+
+for name, model in models.items():
+    clf, acc, report, cm = evaluate_model(model, X_train, y_train, X_test, y_test)
+    accuracies[name] = acc
+    print(f"{name} Accuracy: {acc:.4f}")
+    # print(report)  # Optional
+
+# Convert to DataFrame
+result_df = pd.DataFrame([accuracies], index=["ForwardSelection"])
+print("\nModel Accuracy Comparison:\n")
+print(result_df)
+
+
+result_df.T.plot(kind='bar', legend=False)
+plt.title("Model Accuracy after Forward Selection")
+plt.ylabel("Accuracy")
+plt.xticks(rotation=45)
+plt.tight_layout()
+plt.show()
+
+#Extracting the features selected
+from sklearn.feature_selection import SequentialFeatureSelector
+from sklearn.linear_model import LogisticRegression
+estimator = LogisticRegression(max_iter=1000)
+sfs = SequentialFeatureSelector(estimator, n_features_to_select=5, direction='forward')
+sfs.fit(X, y)
+selected_feature_names = X.columns[sfs.get_support()]
+print("Selected features:", list(selected_feature_names))
